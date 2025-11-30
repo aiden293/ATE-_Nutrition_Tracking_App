@@ -23,7 +23,7 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Database credentials (중요!)
+# Database credentials 
 backend/db.js
 
 # Package lock

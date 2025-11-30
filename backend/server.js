@@ -5,13 +5,10 @@ const db = require('./db');
 const app = express();
 const PORT = 5000;
 
-// 미들웨어
+
 app.use(cors());
 app.use(express.json());
 
-// ==================== 음식 관련 API ====================
-
-// 모든 음식 조회 (영양소 포함)
 app.get('/api/foods', async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -40,7 +37,6 @@ app.get('/api/foods', async (req, res) => {
   }
 });
 
-// 음식 검색 (영양소 포함)
 app.get('/api/foods/search/:query', async (req, res) => {
   try {
     const searchTerm = `%${req.params.query}%`;
@@ -70,14 +66,8 @@ app.get('/api/foods/search/:query', async (req, res) => {
   }
 });
 
-// ==================== 사용자 & 식사 관련 API ====================
-// (기존 코드 유지 - 사용자 테이블은 새로 만들어야 함)
-
-// 임시 사용자용 식사 저장 (간단하게)
 app.post('/api/meals', async (req, res) => {
   const { userId, date, items, totalNutrients } = req.body;
-  
-  // 일단 메모리에 저장 (나중에 실제 DB 테이블 추가)
   console.log('Meal saved:', { userId, date, items, totalNutrients });
   
   res.json({ 
@@ -87,13 +77,10 @@ app.post('/api/meals', async (req, res) => {
   });
 });
 
-// 최근 식사 조회 (임시)
 app.get('/api/meals/:userId', async (req, res) => {
-  // 임시로 빈 배열 반환
   res.json([]);
 });
 
-// 서버 시작
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📊 Using database: cndb_sql_db`);

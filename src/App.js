@@ -3,7 +3,6 @@ import { User, PlusCircle, TrendingUp, Target, Apple, Calendar, Search, X } from
 
 const API_URL = 'http://localhost:5000/api';
 
-// 안전하게 숫자로 변환하는 헬퍼 함수
 const safeNumber = (value, defaultValue = 0) => {
   const num = Number(value);
   return isNaN(num) ? defaultValue : num;
@@ -15,16 +14,14 @@ const AteNutritionApp = () => {
   const [profile, setProfile] = useState(null);
   const [meals, setMeals] = useState([]);
   
-  // 음식 검색 관련
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   
-  // 현재 식사
   const [currentMeal, setCurrentMeal] = useState([]);
   const [selectedFood, setSelectedFood] = useState(null);
 
-  // 로그인 상태 확인
   useEffect(() => {
     loadUserData();
   }, []);
@@ -53,7 +50,6 @@ const AteNutritionApp = () => {
     }
   };
 
-  // 로그인
   const handleLogin = async (username, password) => {
     try {
       const result = localStorage.getItem(`user-${username}`);
@@ -79,7 +75,6 @@ const AteNutritionApp = () => {
     }
   };
 
-  // 회원가입
   const handleCreateAccount = async (username, password) => {
     try {
       const newUser = { username, password };
@@ -93,7 +88,6 @@ const AteNutritionApp = () => {
     }
   };
 
-  // 프로필 생성
   const handleCreateProfile = async (profileData) => {
     try {
       localStorage.setItem(`profile-${user.username}`, JSON.stringify(profileData));
@@ -105,7 +99,6 @@ const AteNutritionApp = () => {
     }
   };
 
-  // 음식 검색 (백엔드 API 호출)
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -117,7 +110,6 @@ const AteNutritionApp = () => {
       const response = await fetch(`${API_URL}/foods/search/${encodeURIComponent(searchQuery)}`);
       const data = await response.json();
       
-      // 데이터 정규화 - 모든 숫자값을 안전하게 변환
       const normalizedData = data.map(food => ({
         id: food.id,
         name: food.name || 'Unknown',
@@ -139,7 +131,6 @@ const AteNutritionApp = () => {
     }
   };
 
-  // 음식을 현재 식사에 추가
   const handleAddFoodToMeal = (food, amount) => {
     const qty = safeNumber(amount, 1);
     
@@ -164,7 +155,6 @@ const AteNutritionApp = () => {
     setSearchResults([]);
   };
 
-  // 식사 완료 (저장)
   const handleCompleteMeal = async () => {
     if (currentMeal.length === 0) return;
     
@@ -202,7 +192,6 @@ const AteNutritionApp = () => {
     setCurrentView('dashboard');
   };
 
-  // 주간 데이터 계산
   const getWeeklyData = () => {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -232,7 +221,6 @@ const AteNutritionApp = () => {
     return totals;
   };
 
-  // 식사 제안
   const getSuggestions = () => {
     if (!profile || meals.length === 0) return [];
     
@@ -269,17 +257,14 @@ const AteNutritionApp = () => {
     return suggestions;
   };
 
-  // 로그인 뷰
   if (currentView === 'login') {
     return <LoginView onLogin={handleLogin} onCreateAccount={handleCreateAccount} />;
   }
 
-  // 프로필 생성 뷰
   if (currentView === 'create-profile') {
     return <CreateProfileView onSubmit={handleCreateProfile} />;
   }
 
-  // 식사 로그 뷰
   if (currentView === 'log-meal') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
@@ -295,7 +280,6 @@ const AteNutritionApp = () => {
               </button>
             </div>
 
-            {/* 음식 검색 */}
             <div className="mb-6">
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -345,7 +329,6 @@ const AteNutritionApp = () => {
               )}
             </div>
 
-            {/* 음식 추가 폼 */}
             {selectedFood && (
               <AddFoodForm
                 food={selectedFood}
@@ -354,7 +337,6 @@ const AteNutritionApp = () => {
               />
             )}
 
-            {/* 현재 식사 아이템 */}
             {currentMeal.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-xl font-semibold mb-4">Current Meal</h3>
@@ -395,14 +377,12 @@ const AteNutritionApp = () => {
     );
   }
 
-  // 대시보드 뷰
   const weeklyData = getWeeklyData();
   const suggestions = getSuggestions();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
       <div className="max-w-6xl mx-auto">
-        {/* 헤더 */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-gray-800">ATE!</h1>
@@ -422,7 +402,6 @@ const AteNutritionApp = () => {
           </button>
         </div>
 
-        {/* 빠른 액션 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <button
             onClick={() => setCurrentView('log-meal')}
@@ -440,7 +419,6 @@ const AteNutritionApp = () => {
           </div>
         </div>
 
-        {/* 주간 분석 */}
         {weeklyData ? (
           <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
@@ -456,7 +434,6 @@ const AteNutritionApp = () => {
               ))}
             </div>
 
-            {/* 영양소 진행바 */}
             <div className="space-y-4">
               {profile && ['protein', 'carbs', 'fat'].map(nutrient => {
                 const weight = safeNumber(profile.weight, 70);
@@ -494,7 +471,6 @@ const AteNutritionApp = () => {
           </div>
         )}
 
-        {/* 식사 제안 */}
         {suggestions.length > 0 && (
           <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-2xl shadow-xl p-8">
             <h2 className="text-2xl font-bold mb-6 flex items-center">
@@ -518,7 +494,6 @@ const AteNutritionApp = () => {
   );
 };
 
-// 로그인 컴포넌트
 const LoginView = ({ onLogin, onCreateAccount }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [username, setUsername] = useState('');
@@ -594,7 +569,7 @@ const LoginView = ({ onLogin, onCreateAccount }) => {
   );
 };
 
-// 프로필 생성 컴포넌트
+
 const CreateProfileView = ({ onSubmit }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -702,7 +677,6 @@ const CreateProfileView = ({ onSubmit }) => {
   );
 };
 
-// 음식 추가 폼 컴포넌트
 const AddFoodForm = ({ food, onAdd, onCancel }) => {
   const [amount, setAmount] = useState('1');
 
