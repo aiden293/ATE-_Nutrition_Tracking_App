@@ -26,6 +26,21 @@ const AteNutritionApp = () => {
     loadUserData();
   }, []);
 
+  // Debounce live search when typing in the input
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      handleSearch();
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
   const loadUserData = async () => {
     try {
       const userResult = localStorage.getItem('current-user');
@@ -114,12 +129,32 @@ const AteNutritionApp = () => {
         id: food.id,
         name: food.name || 'Unknown',
         unit: food.unit || '100g',
+        servingOptions: food.servingOptions || [],  // Include serving options
+        // Macronutrients
         calories: safeNumber(food.calories),
         protein: safeNumber(food.protein),
         carbs: safeNumber(food.carbs),
         fat: safeNumber(food.fat),
         fiber: safeNumber(food.fiber),
-        sugar: safeNumber(food.sugar)
+        sugar: safeNumber(food.sugar),
+        // Minerals
+        calcium: safeNumber(food.calcium),
+        iron: safeNumber(food.iron),
+        magnesium: safeNumber(food.magnesium),
+        phosphorus: safeNumber(food.phosphorus),
+        potassium: safeNumber(food.potassium),
+        sodium: safeNumber(food.sodium),
+        zinc: safeNumber(food.zinc),
+        // Vitamins
+        vitaminA: safeNumber(food.vitaminA),
+        vitaminC: safeNumber(food.vitaminC),
+        vitaminD: safeNumber(food.vitaminD),
+        vitaminE: safeNumber(food.vitaminE),
+        vitaminK: safeNumber(food.vitaminK),
+        vitaminB6: safeNumber(food.vitaminB6),
+        vitaminB12: safeNumber(food.vitaminB12),
+        folate: safeNumber(food.folate),
+        niacin: safeNumber(food.niacin)
       }));
       
       setSearchResults(normalizedData);
@@ -679,20 +714,81 @@ const CreateProfileView = ({ onSubmit }) => {
 
 const AddFoodForm = ({ food, onAdd, onCancel }) => {
   const [amount, setAmount] = useState('1');
+  const [selectedServing, setSelectedServing] = useState(
+    food.servingOptions ? food.servingOptions[0] : null
+  );
+
+  // Convert nutrients based on selected serving size
+  const getConvertedNutrients = () => {
+    if (!selectedServing) return food;
+    
+    const ratio = selectedServing.gramWeight / 100; // assuming food nutrients are per 100g
+    return {
+      ...food,
+      unit: `${selectedServing.gramWeight} ${selectedServing.label}`,
+      calories: food.calories * ratio,
+      protein: food.protein * ratio,
+      carbs: food.carbs * ratio,
+      fat: food.fat * ratio,
+      fiber: food.fiber * ratio,
+      sugar: food.sugar * ratio,
+      calcium: food.calcium * ratio,
+      iron: food.iron * ratio,
+      magnesium: food.magnesium * ratio,
+      phosphorus: food.phosphorus * ratio,
+      potassium: food.potassium * ratio,
+      sodium: food.sodium * ratio,
+      zinc: food.zinc * ratio,
+      vitaminA: food.vitaminA * ratio,
+      vitaminC: food.vitaminC * ratio,
+      vitaminD: food.vitaminD * ratio,
+      vitaminE: food.vitaminE * ratio,
+      vitaminK: food.vitaminK * ratio,
+      vitaminB6: food.vitaminB6 * ratio,
+      vitaminB12: food.vitaminB12 * ratio,
+      folate: food.folate * ratio,
+      niacin: food.niacin * ratio
+    };
+  };
+
+  const convertedFood = getConvertedNutrients();
 
   const handleSubmit = () => {
     const qty = parseFloat(amount);
     if (qty > 0) {
-      onAdd(food, qty);
+      onAdd(convertedFood, qty);
     }
   };
 
   return (
     <div className="bg-green-50 p-6 rounded-lg mb-6">
       <h3 className="font-semibold text-lg mb-2">Adding: {food.name}</h3>
+      
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Serving Size
+        </label>
+        <select
+          value={selectedServing ? selectedServing.label : ''}
+          onChange={(e) => {
+            const selected = food.servingOptions?.find(s => s.label === e.target.value);
+            if (selected) setSelectedServing(selected);
+          }}
+          className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
+        >
+          {food.servingOptions && food.servingOptions.map((opt) => (
+            <option key={opt.label} value={opt.label}>
+              {opt.gramWeight}g ({opt.label})
+            </option>
+          ))}
+        </select>
+      </div>
+
       <p className="text-sm text-gray-600 mb-4">
-        Unit: {food.unit} | 
-        Per serving: {Math.round(safeNumber(food.calories))} cal
+        Per serving: {Math.round(convertedFood.calories)} cal | 
+        P: {convertedFood.protein.toFixed(1)}g | 
+        C: {convertedFood.carbs.toFixed(1)}g | 
+        F: {convertedFood.fat.toFixed(1)}g
       </p>
       
       <div className="mb-4">

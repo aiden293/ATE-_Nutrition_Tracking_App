@@ -1,6 +1,25 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const db = require('./db');
+const fs = require('fs');
+const path = require('path');
+let db;
+let jsonDb;
+try {
+  db = require('./db');
+} catch (e) {
+  // db module missing or not configured
+}
+try {
+  jsonDb = require('./jsonDb');
+} catch (e) {
+  // jsonDb may not exist
+}
+
+// Flexible detection for JSON mode: accept '1','true','yes' (case-insensitive)
+const _useJsonEnv = process.env.USE_JSON_DB;
+const envJsonTrue = typeof _useJsonEnv === 'string' && !['0', 'false', 'no', ''].includes(_useJsonEnv.toLowerCase());
+const JSON_MODE = envJsonTrue;
 
 const app = express();
 const PORT = 5000;
@@ -9,7 +28,33 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
+// Health endpoint to diagnose JSON vs SQL mode and file availability
+app.get('/api/health', (req, res) => {
+  const jsonPath = path.join(__dirname, '../foodNutrientDatabase.json');
+  const jsonExists = fs.existsSync(jsonPath);
+  res.json({
+    mode: JSON_MODE ? 'json' : (db ? 'sql' : 'none'),
+    jsonExists,
+    jsonPath,
+    dbLoaded: !!db
+  });
+});
+
 app.get('/api/foods', async (req, res) => {
+  // If USE_JSON_DB is set (flexibly) or no SQL db configured, use the JSON file.
+  const useJson = JSON_MODE || !db;
+  if (useJson && jsonDb) {
+    try {
+      const items = await jsonDb.streamFind(100);
+      return res.json(items);
+    } catch (err) {
+      console.error('JSON foods fetch error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  if (!db) return res.status(500).json({ error: 'No database configured' });
+
   try {
     const [rows] = await db.query(`
       SELECT DISTINCT
@@ -38,8 +83,22 @@ app.get('/api/foods', async (req, res) => {
 });
 
 app.get('/api/foods/search/:query', async (req, res) => {
+  const useJson = JSON_MODE || !db;
+  const q = req.params.query || '';
+  if (useJson && jsonDb) {
+    try {
+      const items = await jsonDb.streamSearch(q, 50);
+      return res.json(items);
+    } catch (err) {
+      console.error('JSON food search error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  if (!db) return res.status(500).json({ error: 'No database configured' });
+
   try {
-    const searchTerm = `%${req.params.query}%`;
+    const searchTerm = `%${q}%`;
     const [rows] = await db.query(`
       SELECT DISTINCT
         f.cn_code as id,
@@ -83,5 +142,5 @@ app.get('/api/meals/:userId', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Using database: cndb_sql_db`);
+  console.log(`📊 Using database: ${process.env.DB_NAME || 'cndb_sql_db'}`);
 });
