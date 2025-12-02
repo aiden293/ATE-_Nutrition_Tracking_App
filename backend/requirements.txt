@@ -1,0 +1,7 @@
+# Python Backend Requirements
+# Install with: pip install -r requirements.txt
+
+Flask==3.0.0
+flask-cors==4.0.0
+python-dotenv==1.0.0
+mysql-connector-python==8.2.0

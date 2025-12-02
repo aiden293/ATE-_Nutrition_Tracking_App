@@ -1,4 +1,43 @@
-# Getting Started with Create React App
+# ATE! Nutrition Tracking App
+
+A comprehensive nutrition tracking application with real-time food search, meal logging, weekly analytics, and personalized recommendations.
+
+## 🚀 Dual Backend Support
+
+This project supports **TWO interchangeable backends**:
+
+- **Node.js/Express** (Original) - Port 5000
+- **Python/Flask** (New) - Port 5001
+
+**See [BACKEND_GUIDE.md](BACKEND_GUIDE.md) for complete backend documentation.**
+
+## Quick Start
+
+### 1. Start Backend (Choose One)
+
+**Option A: Node.js Backend** (Recommended for JavaScript developers)
+```bash
+./start-backend.sh node
+# Or: cd backend && npm install && node server.js
+```
+
+**Option B: Python Backend** (Recommended for Python developers)
+```bash
+./start-backend.sh python
+# Or: cd backend && pip install -r requirements.txt && python server.py
+```
+
+### 2. Start Frontend
+```bash
+npm install
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the app.
+
+---
+
+## Original Create React App Documentation
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 

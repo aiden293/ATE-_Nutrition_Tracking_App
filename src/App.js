@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { PlusCircle, TrendingUp, Target, Apple, Calendar, Search, X } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5001/api';
 
 const safeNumber = (value, defaultValue = 0) => {
   const num = Number(value);
@@ -435,11 +435,18 @@ const AteNutritionApp = () => {
     const microTargets = { calcium:1000, iron:18, magnesium:420, potassium:3500, vitaminC:90, vitaminD:20, vitaminB12:2.4, folate:400, vitaminA:900, vitaminK:120 };
     const targets = { ...macroTargets, ...microTargets };
     const daily = {}; Object.keys(weekly).forEach(k=>daily[k]=safeNumber(weekly[k])/7);
-    return Object.keys(targets)
+    
+    const allDeficiencies = Object.keys(targets)
       .filter(n=> safeNumber(daily[n]) < targets[n])
-      .map(n=> ({ nutrient:n, deficit: targets[n] - safeNumber(daily[n]), daily: safeNumber(daily[n]), target: targets[n] }))
+      .map(n=> ({ nutrient:n, deficit: targets[n] - safeNumber(daily[n]), daily: safeNumber(daily[n]), target: targets[n] }));
+    
+    // Separate macros and micros, show all macros + top micros
+    const macros = allDeficiencies.filter(d => ['protein', 'carbs', 'fat', 'fiber', 'sugar'].includes(d.nutrient));
+    const micros = allDeficiencies.filter(d => !['protein', 'carbs', 'fat', 'fiber', 'sugar'].includes(d.nutrient))
       .sort((a,b)=> b.deficit - a.deficit)
-      .slice(0,8);
+      .slice(0, 10);
+    
+    return [...macros, ...micros];
   };
 
   const fetchMealSuggestions = React.useCallback(async (deficiencies) => {
@@ -556,6 +563,16 @@ const AteNutritionApp = () => {
   const weeklyData = weeklyResult ? weeklyResult.data : null;
   const weeklyDateRange = weeklyResult ? { start: weeklyResult.startDate, end: weeklyResult.endDate } : null;
   const availableWeeks = getAvailableWeeks();
+  
+  // Get meals for current week for header display
+  const weeklyMeals = React.useMemo(() => {
+    if (!weeklyResult) return [];
+    const { startDate, endDate } = weeklyResult;
+    return meals.filter(m => {
+      const mealDate = new Date(m.date);
+      return mealDate >= startDate && mealDate < endDate;
+    });
+  }, [meals, weeklyResult]);
   const suggestions = getSuggestions();
   
   // Fetch meal suggestions when deficiencies change
@@ -607,7 +624,7 @@ const AteNutritionApp = () => {
                   <Search className="absolute left-4 top-4 text-emerald-600" size={24} />
                   <input type="text" placeholder="Search for food..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 border-4 border-gray-200 rounded-2xl focus:border-emerald-500 focus:outline-none shadow-lg transition font-semibold text-lg" />
                 </div>
-                <button onClick={handleSearch} disabled={isSearching} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-black disabled:bg-gray-400 shadow-lg hover:shadow-xl transform hover:scale-105">{isSearching ? 'Searching...' : 'Search'}</button>
+                <button onClick={()=>handleSearch(searchQuery)} disabled={isSearching} className="bg-emerald-600 text-white px-8 py-4 rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-black disabled:bg-gray-400 shadow-lg hover:shadow-xl transform hover:scale-105">{isSearching ? 'Searching...' : 'Search'}</button>
               </div>
 
               {searchResults.length > 0 && (
@@ -700,6 +717,7 @@ const AteNutritionApp = () => {
           <div>
             <h1 className="text-4xl md:text-5xl font-black text-emerald-700" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>ATE!</h1>
             <p className="text-gray-600 text-base md:text-lg font-semibold">Welcome back, {profile?.name || user?.username}</p>
+            <p className="text-sm text-gray-500 mt-1">{weeklyMeals.length} {weeklyMeals.length === 1 ? 'meal' : 'meals'} logged this week</p>
           </div>
           <div className="flex gap-3">
             <button onClick={()=>transitionToView('profile')} className="px-4 md:px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-emerald-700">Profile</button>
@@ -1021,14 +1039,16 @@ const WeeklyAnalysisView = ({ weeklyData, dateRange }) => {
             <span className="text-sm text-gray-500">{microData.length} nutrients</span>
           </button>
           
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-            {microData.map(([nutrient, value]) => (
-              <div key={nutrient} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <p className="text-xs text-gray-600 mb-1">{formatNutrientName(nutrient)}</p>
-                <p className="text-lg font-semibold text-gray-800">{safeNumber(value).toFixed(1)} {getNutrientUnit(nutrient)}</p>
-              </div>
-            ))}
-          </div>
+          {showMicro && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              {microData.map(([nutrient, value]) => (
+                <div key={nutrient} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <p className="text-xs text-gray-600 mb-1">{formatNutrientName(nutrient)}</p>
+                  <p className="text-lg font-semibold text-gray-800">{safeNumber(value).toFixed(1)} {getNutrientUnit(nutrient)}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
