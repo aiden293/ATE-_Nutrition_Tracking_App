@@ -61,12 +61,31 @@ app.get('/api/foods', async (req, res) => {
         f.cn_code as id,
         f.descriptor as name,
         CONCAT(w.amount, ' ', w.measure_description) as unit,
+        -- Macronutrients
         MAX(CASE WHEN n.nutrient_code = 208 THEN nv.nutrient_value ELSE 0 END) as calories,
         MAX(CASE WHEN n.nutrient_code = 203 THEN nv.nutrient_value ELSE 0 END) as protein,
         MAX(CASE WHEN n.nutrient_code = 205 THEN nv.nutrient_value ELSE 0 END) as carbs,
         MAX(CASE WHEN n.nutrient_code = 204 THEN nv.nutrient_value ELSE 0 END) as fat,
         MAX(CASE WHEN n.nutrient_code = 291 THEN nv.nutrient_value ELSE 0 END) as fiber,
-        MAX(CASE WHEN n.nutrient_code = 269 THEN nv.nutrient_value ELSE 0 END) as sugar
+        MAX(CASE WHEN n.nutrient_code = 269 THEN nv.nutrient_value ELSE 0 END) as sugar,
+        -- Minerals (mg)
+        MAX(CASE WHEN n.nutrient_code = 301 THEN nv.nutrient_value ELSE 0 END) as calcium,
+        MAX(CASE WHEN n.nutrient_code = 303 THEN nv.nutrient_value ELSE 0 END) as iron,
+        MAX(CASE WHEN n.nutrient_code = 304 THEN nv.nutrient_value ELSE 0 END) as magnesium,
+        MAX(CASE WHEN n.nutrient_code = 305 THEN nv.nutrient_value ELSE 0 END) as phosphorus,
+        MAX(CASE WHEN n.nutrient_code = 306 THEN nv.nutrient_value ELSE 0 END) as potassium,
+        MAX(CASE WHEN n.nutrient_code = 307 THEN nv.nutrient_value ELSE 0 END) as sodium,
+        MAX(CASE WHEN n.nutrient_code = 309 THEN nv.nutrient_value ELSE 0 END) as zinc,
+        -- Vitamins
+        MAX(CASE WHEN n.nutrient_code = 320 THEN nv.nutrient_value ELSE 0 END) as vitaminA,
+        MAX(CASE WHEN n.nutrient_code = 401 THEN nv.nutrient_value ELSE 0 END) as vitaminC,
+        MAX(CASE WHEN n.nutrient_code = 328 THEN nv.nutrient_value ELSE 0 END) as vitaminD,
+        MAX(CASE WHEN n.nutrient_code = 323 THEN nv.nutrient_value ELSE 0 END) as vitaminE,
+        MAX(CASE WHEN n.nutrient_code = 430 THEN nv.nutrient_value ELSE 0 END) as vitaminK,
+        MAX(CASE WHEN n.nutrient_code = 415 THEN nv.nutrient_value ELSE 0 END) as vitaminB6,
+        MAX(CASE WHEN n.nutrient_code = 418 THEN nv.nutrient_value ELSE 0 END) as vitaminB12,
+        MAX(CASE WHEN n.nutrient_code = 417 THEN nv.nutrient_value ELSE 0 END) as folate,
+        MAX(CASE WHEN n.nutrient_code = 406 THEN nv.nutrient_value ELSE 0 END) as niacin
       FROM cndb_fdes f
       LEFT JOIN cndb_nutval nv ON f.cn_code = nv.cn_code
       LEFT JOIN cndb_nutdes n ON nv.nutrient_code = n.nutrient_code
@@ -105,12 +124,31 @@ app.get('/api/foods/search/:query', async (req, res) => {
         f.cn_code as id,
         f.descriptor as name,
         CONCAT(COALESCE(w.amount, 100), ' ', COALESCE(w.measure_description, 'g')) as unit,
+        -- Macronutrients
         MAX(CASE WHEN n.nutrient_code = 208 THEN nv.nutrient_value ELSE 0 END) as calories,
         MAX(CASE WHEN n.nutrient_code = 203 THEN nv.nutrient_value ELSE 0 END) as protein,
         MAX(CASE WHEN n.nutrient_code = 205 THEN nv.nutrient_value ELSE 0 END) as carbs,
         MAX(CASE WHEN n.nutrient_code = 204 THEN nv.nutrient_value ELSE 0 END) as fat,
         MAX(CASE WHEN n.nutrient_code = 291 THEN nv.nutrient_value ELSE 0 END) as fiber,
-        MAX(CASE WHEN n.nutrient_code = 269 THEN nv.nutrient_value ELSE 0 END) as sugar
+        MAX(CASE WHEN n.nutrient_code = 269 THEN nv.nutrient_value ELSE 0 END) as sugar,
+        -- Minerals (mg)
+        MAX(CASE WHEN n.nutrient_code = 301 THEN nv.nutrient_value ELSE 0 END) as calcium,
+        MAX(CASE WHEN n.nutrient_code = 303 THEN nv.nutrient_value ELSE 0 END) as iron,
+        MAX(CASE WHEN n.nutrient_code = 304 THEN nv.nutrient_value ELSE 0 END) as magnesium,
+        MAX(CASE WHEN n.nutrient_code = 305 THEN nv.nutrient_value ELSE 0 END) as phosphorus,
+        MAX(CASE WHEN n.nutrient_code = 306 THEN nv.nutrient_value ELSE 0 END) as potassium,
+        MAX(CASE WHEN n.nutrient_code = 307 THEN nv.nutrient_value ELSE 0 END) as sodium,
+        MAX(CASE WHEN n.nutrient_code = 309 THEN nv.nutrient_value ELSE 0 END) as zinc,
+        -- Vitamins
+        MAX(CASE WHEN n.nutrient_code = 320 THEN nv.nutrient_value ELSE 0 END) as vitaminA,
+        MAX(CASE WHEN n.nutrient_code = 401 THEN nv.nutrient_value ELSE 0 END) as vitaminC,
+        MAX(CASE WHEN n.nutrient_code = 328 THEN nv.nutrient_value ELSE 0 END) as vitaminD,
+        MAX(CASE WHEN n.nutrient_code = 323 THEN nv.nutrient_value ELSE 0 END) as vitaminE,
+        MAX(CASE WHEN n.nutrient_code = 430 THEN nv.nutrient_value ELSE 0 END) as vitaminK,
+        MAX(CASE WHEN n.nutrient_code = 415 THEN nv.nutrient_value ELSE 0 END) as vitaminB6,
+        MAX(CASE WHEN n.nutrient_code = 418 THEN nv.nutrient_value ELSE 0 END) as vitaminB12,
+        MAX(CASE WHEN n.nutrient_code = 417 THEN nv.nutrient_value ELSE 0 END) as folate,
+        MAX(CASE WHEN n.nutrient_code = 406 THEN nv.nutrient_value ELSE 0 END) as niacin
       FROM cndb_fdes f
       LEFT JOIN cndb_nutval nv ON f.cn_code = nv.cn_code
       LEFT JOIN cndb_nutdes n ON nv.nutrient_code = n.nutrient_code

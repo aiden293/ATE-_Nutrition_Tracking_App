@@ -54,6 +54,10 @@ const AteNutritionApp = () => {
   const [editingMeal, setEditingMeal] = useState(null);
   const [selectedWeekOffset, setSelectedWeekOffset] = useState(0);
   const [suggestedMeals, setSuggestedMeals] = useState([]);
+  
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [nextView, setNextView] = useState(null);
+  const [expandingElement, setExpandingElement] = useState(null);
 
   useEffect(() => {
     try {
@@ -71,6 +75,174 @@ const AteNutritionApp = () => {
       // ignore
     }
   }, []);
+  
+  const transitionToView = (view, elementId = null) => {
+    if (elementId) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      
+      // Capture current position
+      const rect = element.getBoundingClientRect();
+      
+      // Measure exact target rect using a hidden fixed probe so sizes match overlays precisely
+      const measureTargetRect = () => {
+        const probe = document.createElement('div');
+        probe.style.position = 'fixed';
+        probe.style.top = '24px'; // 1.5rem
+        probe.style.left = '16px'; // 1rem
+        probe.style.right = '16px'; // 1rem
+        probe.style.bottom = '16px'; // 1rem from bottom to match panels
+        probe.style.maxWidth = '1024px'; // 64rem
+        probe.style.margin = '0 auto';
+        probe.style.visibility = 'hidden';
+        probe.style.pointerEvents = 'none';
+        probe.style.boxSizing = 'border-box';
+        document.body.appendChild(probe);
+        const r = probe.getBoundingClientRect();
+        document.body.removeChild(probe);
+        return r;
+      };
+      const targetRect = measureTargetRect();
+      
+      setExpandingElement(elementId);
+      setIsTransitioning(true);
+      setNextView(view);
+      
+      // Apply fixed positioning with current coordinates on next frame
+      requestAnimationFrame(() => {
+        element.style.position = 'fixed';
+        element.style.top = `${rect.top}px`;
+        element.style.left = `${rect.left}px`;
+        element.style.width = `${rect.width}px`;
+        element.style.height = `${rect.height}px`;
+        element.style.margin = '0';
+        element.style.transition = 'all 450ms cubic-bezier(0.4, 0, 0.2, 1)';
+        element.style.zIndex = '9999';
+        element.style.boxSizing = 'border-box';
+        // Neutralize any hover transforms that could bloat size during morph
+        element.style.transform = 'none';
+        element.style.willChange = 'top, left, width, height';
+        
+        // Use measured target rect for perfect alignment
+        const finalTop = targetRect.top;
+        const finalLeft = targetRect.left;
+        const finalWidth = targetRect.width;
+        const finalHeight = targetRect.height;
+        
+        // Trigger expansion after position is set
+        requestAnimationFrame(() => {
+          element.style.top = `${finalTop}px`;
+          element.style.left = `${finalLeft}px`;
+          element.style.width = `${finalWidth}px`;
+          element.style.height = `${finalHeight}px`;
+        });
+      });
+      
+      // After expansion completes, switch view
+      setTimeout(() => {
+        setCurrentView(view);
+      }, 450);
+      
+      // Clean up state after fade-in
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setNextView(null);
+        setExpandingElement(null);
+      }, 750);
+    } else {
+      setIsTransitioning(true);
+      setNextView(view);
+      setTimeout(() => {
+        setCurrentView(view);
+        setIsTransitioning(false);
+        setNextView(null);
+      }, 400);
+    }
+  };
+
+  const transitionBackToDashboard = (sourceButtonId, panelId) => {
+    try {
+      const panel = document.getElementById(panelId);
+      if (!panel) {
+        setCurrentView('dashboard');
+        return;
+      }
+      const rect = panel.getBoundingClientRect();
+
+      const ghost = document.createElement('div');
+      ghost.style.position = 'fixed';
+      ghost.style.top = `${rect.top}px`;
+      ghost.style.left = `${rect.left}px`;
+      ghost.style.width = `${rect.width}px`;
+      ghost.style.height = `${rect.height}px`;
+      ghost.style.background = '#ffffff';
+      ghost.style.borderRadius = '1.5rem';
+      ghost.style.border = '4px solid #ffffff';
+      ghost.style.boxShadow = '0 25px 50px rgba(0,0,0,0.25)';
+      ghost.style.zIndex = '9999';
+      ghost.style.pointerEvents = 'none';
+      ghost.style.opacity = '1';
+      document.body.appendChild(ghost);
+
+      // Hide the panel to avoid overlap during reverse animation
+      panel.style.visibility = 'hidden';
+
+      // Prepare dashboard to fade in from 0 -> 1
+      setIsTransitioning(true);
+      setExpandingElement('reverse');
+
+      // Switch to dashboard next tick so target exists
+      setTimeout(() => {
+        setCurrentView('dashboard');
+
+        requestAnimationFrame(() => {
+          const target = document.getElementById(sourceButtonId);
+          const tRect = target ? target.getBoundingClientRect() : rect;
+
+          // Force header visible immediately on dashboard mount
+          const header = document.getElementById('dashboard-header');
+          if (header) {
+            header.style.opacity = '1';
+            header.style.transition = 'opacity 0ms';
+            header.style.visibility = 'visible';
+            header.style.zIndex = '10000';
+          }
+
+          // Immediately allow dashboard content (header, tiles) to show
+          setExpandingElement(null);
+
+          // Animate ghost to target and fade it while shrinking
+          ghost.style.transition = 'all 450ms cubic-bezier(0.4, 0, 0.2, 1), opacity 250ms ease-out 0ms';
+          requestAnimationFrame(() => {
+            ghost.style.top = `${tRect.top}px`;
+            ghost.style.left = `${tRect.left}px`;
+            ghost.style.width = `${tRect.width}px`;
+            ghost.style.height = `${tRect.height}px`;
+            // Start ghost fade immediately so header remains visible
+            ghost.style.opacity = '0';
+          });
+
+          // Cleanup after animation
+          setTimeout(() => {
+            if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+            setExpandingElement(null);
+            setIsTransitioning(false);
+            // Clean any forced inline styles on header
+            const header2 = document.getElementById('dashboard-header');
+            if (header2) {
+              header2.style.transition = '';
+              header2.style.zIndex = '';
+              header2.style.visibility = '';
+            }
+          }, 470);
+        });
+        setCurrentView('dashboard');
+      }, 0);
+    } catch (e) {
+      setCurrentView('dashboard');
+    }
+  };
+  
   const handleSearch = React.useCallback(async (qRaw) => {
     const q = (qRaw || '').toString().trim();
     if (!q) { setSearchResults([]); return; }
@@ -185,7 +357,7 @@ const AteNutritionApp = () => {
     setMeals(updated);
     try { if (user) localStorage.setItem(`meals-${user.username}`, JSON.stringify(updated)); } catch(e){}
     setCurrentMeal([]);
-    setCurrentView('dashboard');
+    transitionToView('dashboard');
   };
 
   const handleEditMeal = (meal) => {
@@ -196,7 +368,7 @@ const AteNutritionApp = () => {
       const mealDate = new Date(meal.date).toISOString().slice(0,10);
       localStorage.setItem('pending-meal-date', mealDate);
     } catch(e){}
-    setCurrentView('log-meal');
+    transitionToView('log-meal');
   };
 
   const handleDeleteMeal = (mealId) => {
@@ -292,9 +464,93 @@ const AteNutritionApp = () => {
 
   const handleAddSuggestedMeal = (meal) => {
     setCurrentMeal(meal.foods);
-    setCurrentView('log-meal');
+    transitionToView('log-meal');
   };
 
+  // Meals list view
+  const MealsView = ({ meals, onBack, onEdit, onDelete }) => {
+    const [confirmDelete, setConfirmDelete] = React.useState(null);
+    
+    if (!meals.length) return (
+      <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
+        <div id="meals-panel" className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white text-center" style={{
+          position: 'fixed',
+          top: '1.5rem',
+          left: '1rem',
+          right: '1rem',
+          bottom: '1rem',
+          maxWidth: '64rem',
+          margin: '0 auto',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain'
+        }}>
+          <h2 className="text-3xl font-bold mb-4">Meals</h2>
+          <p className="text-gray-600 mb-6">No meals logged yet.</p>
+          <button onClick={onBack} className="px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300">Back</button>
+        </div>
+      </div>
+    );
+    return (
+      <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
+        <div id="meals-panel" className="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white" style={{
+          position: 'fixed',
+          top: '1.5rem',
+          left: '1rem',
+          right: '1rem',
+          bottom: '1rem',
+          maxWidth: '64rem',
+          margin: '0 auto',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain'
+        }}>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-3xl font-bold text-gray-800">Meal History</h2>
+            <button onClick={onBack} className="text-gray-600 hover:text-gray-800"><X /></button>
+          </div>
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+            {meals.slice().reverse().map(meal => (
+              <div key={meal.id} className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-white to-green-50">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold text-lg">{new Date(meal.date).toLocaleDateString()}</h3>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-gray-500 mr-2">Items: {meal.items.length}</div>
+                    <button onClick={()=>onEdit(meal)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition">Edit</button>
+                    {confirmDelete === meal.id ? (
+                      <div className="flex gap-1">
+                        <button onClick={()=>{onDelete(meal.id); setConfirmDelete(null);}} className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">Confirm</button>
+                        <button onClick={()=>setConfirmDelete(null)} className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500">Cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={()=>setConfirmDelete(meal.id)} className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition">Delete</button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3">
+                  {Object.entries(meal.totalNutrients || {}).slice(0,12).map(([k,v]) => (
+                    <div key={k} className="bg-gray-50 rounded p-2">
+                      <p className="text-gray-600">{formatNutrientName(k)}</p>
+                      <p className="font-semibold">{safeNumber(v).toFixed(1)}</p>
+                    </div>
+                  ))}
+                </div>
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-green-700">Show items</summary>
+                  <ul className="mt-2 space-y-1">
+                    {meal.items.map((it,i)=>(
+                      <li key={i} className="flex justify-between border-b last:border-b-0 py-1">
+                        <span>{it.name} x {it.amount} {it.unit}</span>
+                        <span>{Math.round(safeNumber(it.nutrients?.calories))} cal</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
   // Compute these before early returns
   const weeklyResult = getWeeklyData(selectedWeekOffset);
   const weeklyData = weeklyResult ? weeklyResult.data : null;
@@ -313,23 +569,34 @@ const AteNutritionApp = () => {
   }, [suggestions.length, selectedWeekOffset, meals.length]);
 
   if (currentView === 'login') return <LoginView onLogin={(u,p)=>{
-    try { const stored = localStorage.getItem(`user-${u}`); if (!stored) return false; const su = JSON.parse(stored); if (su.password === p) { localStorage.setItem('current-user', JSON.stringify(su)); setUser(su); const prof = localStorage.getItem(`profile-${u}`); if (prof) setProfile(JSON.parse(prof)); const ms = localStorage.getItem(`meals-${u}`); if (ms) setMeals(JSON.parse(ms)); setCurrentView('dashboard'); return true; } } catch(e){} return false; }} onCreateAccount={(u,p)=>{ const nu={username:u,password:p}; localStorage.setItem(`user-${u}`, JSON.stringify(nu)); localStorage.setItem('current-user', JSON.stringify(nu)); setUser(nu); setCurrentView('create-profile'); return true; }} />;
+    try { const stored = localStorage.getItem(`user-${u}`); if (!stored) return false; const su = JSON.parse(stored); if (su.password === p) { localStorage.setItem('current-user', JSON.stringify(su)); setUser(su); const prof = localStorage.getItem(`profile-${u}`); if (prof) setProfile(JSON.parse(prof)); const ms = localStorage.getItem(`meals-${u}`); if (ms) setMeals(JSON.parse(ms)); transitionToView('dashboard'); return true; } } catch(e){} return false; }} onCreateAccount={(u,p)=>{ const nu={username:u,password:p}; localStorage.setItem(`user-${u}`, JSON.stringify(nu)); localStorage.setItem('current-user', JSON.stringify(nu)); setUser(nu); transitionToView('create-profile'); return true; }} />;
 
-  if (currentView === 'create-profile') return <CreateProfileView onSubmit={(pd)=>{ if(!user) return setCurrentView('login'); localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); setCurrentView('dashboard'); }} />;
+  if (currentView === 'create-profile') return <CreateProfileView onSubmit={(pd)=>{ if(!user) return transitionToView('login'); localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); transitionToView('dashboard'); }} />;
 
-  if (currentView === 'profile') return <ProfileView profile={profile} onUpdate={(pd)=>{ if(!user) return; localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); }} onBack={()=>setCurrentView('dashboard')} />;
+  if (currentView === 'profile') return <ProfileView profile={profile} onUpdate={(pd)=>{ if(!user) return; localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); }} onBack={()=>transitionToView('dashboard')} />;
 
-  if (currentView === 'meals') return <MealsView meals={meals} onBack={()=>setCurrentView('dashboard')} onEdit={handleEditMeal} onDelete={handleDeleteMeal} />;
-  if (currentView === 'charts') return <ChartsView meals={meals} onBack={()=>setCurrentView('dashboard')} />;
+  if (currentView === 'meals') return <MealsView meals={meals} onBack={()=>transitionBackToDashboard('meals-btn','meals-panel')} onEdit={handleEditMeal} onDelete={handleDeleteMeal} />;
+  if (currentView === 'charts') return <ChartsView meals={meals} onBack={()=>transitionBackToDashboard('charts-btn','charts-panel')} />;
+  if (currentView === 'recs') return <RecommendationsView suggestions={suggestions} suggestedMeals={suggestedMeals} onAddSuggestedMeal={handleAddSuggestedMeal} onBack={()=>transitionBackToDashboard('recs-btn','recs-panel')} />;
 
   if (currentView === 'log-meal') {
     return (
       <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white">
+          <div id="log-meal-panel" className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white" style={{
+            position: 'fixed',
+            top: '1.5rem',
+            left: '1rem',
+            right: '1rem',
+            bottom: '1rem',
+            maxWidth: '64rem',
+            margin: '0 auto',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain'
+          }}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-3xl md:text-4xl font-black text-emerald-700">{editingMeal ? 'Edit Meal' : 'Log Meal'}</h2>
-              <button onClick={()=>{ setCurrentView('dashboard'); setEditingMeal(null); setCurrentMeal([]); }} className="text-white bg-gray-700 hover:bg-gray-800 p-3 rounded-2xl transition-all duration-300 transform hover:scale-110 shadow-lg"><X size={24} /></button>
+              <button onClick={()=>{ transitionBackToDashboard('log-meal-btn','log-meal-panel'); setEditingMeal(null); setCurrentMeal([]); }} className="text-white bg-gray-700 hover:bg-gray-800 p-3 rounded-2xl transition-all duration-300 transform hover:scale-110 shadow-lg"><X size={24} /></button>
             </div>
             {/* Date selection */}
             <MealDateInput />
@@ -375,6 +642,34 @@ const AteNutritionApp = () => {
                     </div>
                   ))}
                 </div>
+                {/* Quick nutrient debug summary to verify micros aggregation */}
+                <div className="mt-3 bg-white border border-gray-200 rounded-lg p-3 text-sm text-gray-700">
+                  <div className="font-semibold mb-2">Micronutrient totals (nonzero):</div>
+                  {(() => {
+                    const totals = {};
+                    currentMeal.forEach(it => {
+                      Object.entries(it.nutrients || {}).forEach(([k, v]) => {
+                        // Skip macros in this debug block
+                        if (['calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar'].includes(k)) return;
+                        totals[k] = safeNumber(totals[k]) + safeNumber(v);
+                      });
+                    });
+                    const entries = Object.entries(totals)
+                      .filter(([, v]) => safeNumber(v) > 0)
+                      .sort((a, b) => b[1] - a[1]);
+                    return entries.length ? (
+                      <div className="flex flex-wrap gap-3">
+                        {entries.map(([k, v]) => (
+                          <span key={k} className="px-2 py-1 bg-gray-50 rounded">
+                            {formatNutrientName(k)}: {safeNumber(v).toFixed(1)} {getNutrientUnit(k)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-gray-500">No micronutrients yet.</div>
+                    );
+                  })()}
+                </div>
                 <button onClick={handleCompleteMeal} className="w-full mt-4 bg-emerald-600 text-white py-4 rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-black text-lg shadow-2xl transform hover:scale-105">{editingMeal ? 'Update Meal' : 'Complete Meal'}</button>
               </div>
             )}
@@ -393,43 +688,112 @@ const AteNutritionApp = () => {
   return (
     <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6 md:mb-8 bg-white rounded-3xl p-5 md:p-7 shadow-2xl border-4 border-white">
+        <div id="dashboard-header"
+          className="flex justify-between items-center mb-6 md:mb-8 bg-white rounded-3xl p-5 md:p-7 shadow-2xl border-4 border-white"
+          style={{
+            opacity: isTransitioning && expandingElement && expandingElement !== 'reverse' ? 0 : 1,
+            transition: 'opacity 300ms ease-out',
+            position: 'relative',
+            zIndex: expandingElement === 'reverse' ? 10000 : 'auto'
+          }}
+        >
           <div>
             <h1 className="text-4xl md:text-5xl font-black text-emerald-700" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>ATE!</h1>
             <p className="text-gray-600 text-base md:text-lg font-semibold">Welcome back, {profile?.name || user?.username}</p>
           </div>
           <div className="flex gap-3">
-            <button onClick={()=>setCurrentView('profile')} className="px-4 md:px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-emerald-700">Profile</button>
-            <button onClick={()=>{ setUser(null); setProfile(null); setMeals([]); localStorage.removeItem('current-user'); setCurrentView('login'); }} className="px-4 md:px-5 py-3 bg-gray-700 text-white rounded-2xl hover:bg-gray-800 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-gray-800">Logout</button>
+            <button onClick={()=>transitionToView('profile')} className="px-4 md:px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-emerald-700">Profile</button>
+            <button onClick={()=>{ setUser(null); setProfile(null); setMeals([]); localStorage.removeItem('current-user'); transitionToView('login'); }} className="px-4 md:px-5 py-3 bg-gray-700 text-white rounded-2xl hover:bg-gray-800 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-gray-800">Logout</button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-7 mb-6 md:mb-8">
-          <button onClick={()=>setCurrentView('log-meal')} className="bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 hover:-rotate-1 group border-4 border-white">
-            <PlusCircle size={40} className="mb-3 text-emerald-600 group-hover:scale-125 group-hover:rotate-12 transition-transform" />
-            <h3 className="text-xl md:text-2xl font-black">Log Meal</h3>
-            <p className="text-gray-600 text-base font-semibold mt-2">Track your food intake</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-7 mb-6 md:mb-8" style={{position: 'relative'}}>
+          <button 
+            id="log-meal-btn"
+            onClick={()=>transitionToView('log-meal', 'log-meal-btn')} 
+            className={`bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] group border-4 border-white transition-all duration-300 ${
+              expandingElement === 'log-meal-btn' ? 'z-[9999]' : 'relative'
+            }`}
+            style={{
+              opacity: isTransitioning && expandingElement && expandingElement !== 'log-meal-btn' ? 0 : 1,
+              transition: 'opacity 300ms ease-out'
+            }}
+          >
+            <div className={`transition-opacity duration-250 ${
+              expandingElement === 'log-meal-btn' ? 'opacity-0 delay-150' : 'opacity-100'
+            }`}>
+              <PlusCircle size={40} className="mb-3 text-emerald-600 group-hover:scale-125 group-hover:rotate-12 transition-transform" />
+              <h3 className="text-xl md:text-2xl font-black">Log Meal</h3>
+              <p className="text-gray-600 text-base font-semibold mt-2">Track your food intake</p>
+            </div>
           </button>
 
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-2xl border-4 border-white transform hover:scale-105 transition-all duration-300">
-            <Target size={40} className="text-emerald-600 mb-3" />
-            <h3 className="text-xl md:text-2xl font-black text-gray-800">Total Meals</h3>
-            <p className="text-5xl font-black text-emerald-600">{meals.length}</p>
-          </div>
-
-          <button onClick={()=>setCurrentView('meals')} className="bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 hover:rotate-1 group border-4 border-white">
-            <Calendar size={40} className="mb-3 text-emerald-600 group-hover:scale-125 group-hover:-rotate-12 transition-transform" />
-            <h3 className="text-xl md:text-2xl font-black">Meal History</h3>
-            <p className="text-gray-600 text-base font-semibold mt-2">View logged meals</p>
+          
+          <button 
+            id="recs-btn"
+            onClick={()=>transitionToView('recs', 'recs-btn')} 
+            className={`bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 group border-4 border-white ${
+              expandingElement === 'recs-btn' ? 'z-[9999]' : 'relative'
+            }`}
+            style={{
+              opacity: isTransitioning && expandingElement && expandingElement !== 'recs-btn' ? 0 : 1,
+              transition: 'opacity 300ms ease-out'
+            }}
+          >
+            <div className={`transition-opacity duration-250 ${
+              expandingElement === 'recs-btn' ? 'opacity-0 delay-150' : 'opacity-100'
+            }`}>
+              <Apple size={40} className="mb-3 text-emerald-600 group-hover:scale-125 transition-transform" />
+              <h3 className="text-xl md:text-2xl font-black">Recommendations & Suggestions</h3>
+              <p className="text-gray-600 text-base font-semibold mt-2">Improve your nutrition</p>
+            </div>
           </button>
 
-          <button onClick={()=>setCurrentView('charts')} className="bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 hover:-rotate-1 group border-4 border-white">
-            <TrendingUp size={40} className="mb-3 text-emerald-600 group-hover:scale-125 group-hover:rotate-12 transition-transform" />
-            <h3 className="text-xl md:text-2xl font-black">Analytics</h3>
-            <p className="text-gray-600 text-base font-semibold mt-2">Visualize trends</p>
+          <button 
+            id="meals-btn"
+            onClick={()=>transitionToView('meals', 'meals-btn')} 
+            className={`bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 group border-4 border-white ${
+              expandingElement === 'meals-btn' ? 'z-[9999]' : 'relative'
+            }`}
+            style={{
+              opacity: isTransitioning && expandingElement && expandingElement !== 'meals-btn' ? 0 : 1,
+              transition: 'opacity 300ms ease-out'
+            }}
+          >
+            <div className={`transition-opacity duration-250 ${
+              expandingElement === 'meals-btn' ? 'opacity-0 delay-150' : 'opacity-100'
+            }`}>
+              <Calendar size={40} className="mb-3 text-emerald-600 group-hover:scale-125 transition-transform" />
+              <h3 className="text-xl md:text-2xl font-black">Meal History</h3>
+              <p className="text-gray-600 text-base font-semibold mt-2">View logged meals</p>
+            </div>
+          </button>
+
+          <button 
+            id="charts-btn"
+            onClick={()=>transitionToView('charts', 'charts-btn')} 
+            className={`bg-white text-gray-800 p-6 md:p-8 rounded-3xl shadow-2xl hover:shadow-[0_20px_60px_rgba(255,255,255,0.5)] transition-all duration-300 transform hover:scale-105 group border-4 border-white ${
+              expandingElement === 'charts-btn' ? 'z-[9999]' : 'relative'
+            }`}
+            style={{
+              opacity: isTransitioning && expandingElement && expandingElement !== 'charts-btn' ? 0 : 1,
+              transition: 'opacity 300ms ease-out'
+            }}
+          >
+            <div className={`transition-opacity duration-250 ${
+              expandingElement === 'charts-btn' ? 'opacity-0 delay-150' : 'opacity-100'
+            }`}>
+              <TrendingUp size={40} className="mb-3 text-emerald-600 group-hover:scale-125 transition-transform" />
+              <h3 className="text-xl md:text-2xl font-black">Analytics</h3>
+              <p className="text-gray-600 text-base font-semibold mt-2">Visualize trends</p>
+            </div>
           </button>
         </div>
 
+        <div style={{
+          opacity: isTransitioning && expandingElement && expandingElement !== 'reverse' ? 0 : 1,
+          transition: 'opacity 300ms ease-out'
+        }}>
         {availableWeeks.length > 0 && (
           <div className="mb-6 bg-white rounded-2xl p-5 shadow-2xl border-4 border-white">
             <label className="block text-lg font-black text-gray-800 mb-3">Analyze Week</label>
@@ -456,113 +820,135 @@ const AteNutritionApp = () => {
           </div>
         )}
 
-        {suggestions.length > 0 && (
-          <div className="bg-white text-gray-800 rounded-3xl shadow-2xl p-6 md:p-8 mb-6 md:mb-8 border-4 border-white transform hover:scale-[1.01] transition-all duration-300">
-            <h2 className="text-2xl md:text-3xl font-black mb-6 flex items-center text-emerald-700"><Apple className="mr-3" size={36} /> Nutrition Recommendations</h2>
-            
-            {/* Macronutrients */}
-            {suggestions.filter(s => ['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3">Macronutrients</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  {suggestions.filter(s => ['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).map((s, i) => {
-                    const unit = getNutrientUnit(s.nutrient);
-                    return (
-                      <div key={i} className="bg-white bg-opacity-80 border-2 border-white rounded-xl p-4 shadow-md">
-                        <p className="font-bold mb-1 text-gray-800">{formatNutrientName(s.nutrient)}</p>
-                        <p className="text-xs mb-2 text-gray-600">Daily avg: {s.daily.toFixed(1)} {unit} / Target: {s.target} {unit}</p>
-                        <p className="text-sm font-bold mb-1 text-orange-500">Deficit: {s.deficit.toFixed(1)} {unit}/day</p>
-                        <p className="text-sm text-gray-600">Consider adding more foods rich in {formatNutrientName(s.nutrient).toLowerCase()}.</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+        {/* Removed Suggested Meals block from dashboard; now in Recommendations overlay */}
+        </div>
+      </div>
+    </div>
+  );
+};
 
-            {/* Micronutrients */}
-            {suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length > 0 && (
-              <details className="bg-white bg-opacity-60 border-2 border-white rounded-xl p-4 shadow-md">
-                <summary className="cursor-pointer font-bold text-lg mb-2 text-gray-800">
-                  Micronutrients ({suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length} deficiencies)
-                </summary>
-                <div className="grid md:grid-cols-3 gap-3 mt-3">
-                  {suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).map((s, i) => {
-                    const unit = getNutrientUnit(s.nutrient);
-                    return (
-                      <div key={i} className="bg-white bg-opacity-50 border border-gray-300 rounded-lg p-3 text-sm shadow-sm">
-                        <p className="font-bold mb-1 text-gray-800">{formatNutrientName(s.nutrient)}</p>
-                        <p className="text-xs mb-1 text-gray-600">Avg: {s.daily.toFixed(1)} {unit}</p>
-                        <p className="text-xs text-gray-600">Target: {s.target} {unit}</p>
-                        <p className="text-xs font-bold mt-1 text-orange-500">Need: +{s.deficit.toFixed(1)} {unit}/day</p>
-                      </div>
-                    );
-                  })}
+// Recommendations overlay view
+const RecommendationsView = ({ suggestions, suggestedMeals, onAddSuggestedMeal, onBack }) => {
+  return (
+    <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
+      <div id="recs-panel" className="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white" style={{
+        position: 'fixed',
+        top: '1.5rem',
+        left: '1rem',
+        right: '1rem',
+        bottom: '1rem',
+        maxWidth: '64rem',
+        margin: '0 auto',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain'
+      }}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl md:text-4xl font-black text-emerald-700">Recommendations</h2>
+          <button onClick={onBack} className="text-white bg-gray-700 hover:bg-gray-800 p-3 rounded-2xl transition-all duration-300 transform hover:scale-110 shadow-lg"><X /></button>
+        </div>
+        {/* Nutrition recommendations and suggested meals moved from dashboard */}
+        <div className="space-y-8">
+          {suggestions && suggestions.length > 0 ? (
+            <div>
+              {suggestions.filter(s => ['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-3">Macronutrients</h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {suggestions.filter(s => ['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).map((s, i) => {
+                      const unit = getNutrientUnit(s.nutrient);
+                      return (
+                        <div key={i} className="bg-white bg-opacity-80 border-2 border-white rounded-xl p-4 shadow-md">
+                          <p className="font-bold mb-1 text-gray-800">{formatNutrientName(s.nutrient)}</p>
+                          <p className="text-xs mb-2 text-gray-600">Daily avg: {s.daily.toFixed(1)} {unit} / Target: {s.target} {unit}</p>
+                          <p className="text-sm font-bold mb-1 text-orange-500">Deficit: {s.deficit.toFixed(1)} {unit}/day</p>
+                          <p className="text-sm text-gray-600">Consider adding more foods rich in {formatNutrientName(s.nutrient).toLowerCase()}.</p>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </details>
+              )}
+              {suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length > 0 && (
+                <details className="bg-white bg-opacity-60 border-2 border-white rounded-xl p-4 shadow-md">
+                  <summary className="cursor-pointer font-bold text-lg mb-2 text-gray-800">
+                    Micronutrients ({suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).length} deficiencies)
+                  </summary>
+                  <div className="grid md:grid-cols-3 gap-3 mt-3">
+                    {suggestions.filter(s => !['calories', 'protein', 'carbs', 'fat', 'fiber'].includes(s.nutrient)).map((s, i) => {
+                      const unit = getNutrientUnit(s.nutrient);
+                      return (
+                        <div key={i} className="bg-white bg-opacity-50 border border-gray-300 rounded-lg p-3 text-sm shadow-sm">
+                          <p className="font-bold text-gray-800">{formatNutrientName(s.nutrient)}</p>
+                          <p className="text-xs text-gray-600">Daily avg: {s.daily.toFixed(1)} {unit} / Target: {s.target} {unit}</p>
+                          <p className="text-xs text-orange-500 font-semibold">Deficit: {s.deficit.toFixed(1)} {unit}/day</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-gray-600">No suggestions yet — log meals to see recommendations.</div>
+          )}
+
+          {/* Suggested Meals moved here */}
+          <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white">
+            <h2 className="text-2xl md:text-3xl font-black text-gray-800 mb-6 flex items-center"><Apple className="mr-3 text-emerald-600" size={36} /> Suggested Meals</h2>
+            {suggestions.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-xl font-semibold text-gray-800 mb-2">No Nutritional Deficiencies Detected!</p>
+                <p className="text-gray-600">You're meeting your nutritional targets for the selected week. Keep up the great work!</p>
+              </div>
+            ) : suggestedMeals && suggestedMeals.length > 0 ? (
+              <>
+                <p className="text-gray-600 mb-6">These meals address multiple nutritional deficiencies at once:</p>
+                <div className="grid md:grid-cols-2 gap-5 md:gap-7">
+                  {suggestedMeals.slice(0, 4).map(meal => (
+                    <div key={meal.id} className="border-4 border-gray-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-2xl transition-all duration-300 bg-gray-50 transform hover:scale-105 hover:-rotate-1">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-800">{meal.name}</h3>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{meal.category}</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-green-600">{meal.deficitsCovered} deficits</p>
+                          <p className="text-xs text-gray-500">covered</p>
+                        </div>
+                      </div>
+                      <div className="mb-4 space-y-1">
+                        {meal.foods.map((food, idx) => (
+                          <div key={idx} className="text-sm text-gray-700 flex justify-between">
+                            <span>• {food.name}</span>
+                            <span className="text-gray-500">{food.amount} {food.unit}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mb-3 pb-3 border-t border-gray-200 pt-3">
+                        <div className="flex justify-between text-xs text-gray-600">
+                          <span>Calories: {Math.round(meal.totalNutrients.calories)}</span>
+                          <span>Protein: {meal.totalNutrients.protein.toFixed(1)}g</span>
+                          <span>Carbs: {meal.totalNutrients.carbs.toFixed(1)}g</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => onAddSuggestedMeal(meal)}
+                        className="w-full bg-emerald-600 text-white py-3 rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-black shadow-lg hover:shadow-xl transform hover:scale-105"
+                      >
+                        Add to Log
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-4">🔄</div>
+                <p className="text-lg font-semibold text-gray-800 mb-2">Loading meal suggestions...</p>
+                <p className="text-gray-600">Analyzing your deficiencies to find the best meals for you.</p>
+              </div>
             )}
           </div>
-        )}
-
-        <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white">
-          <h2 className="text-2xl md:text-3xl font-black text-gray-800 mb-6 flex items-center"><Apple className="mr-3 text-emerald-600" size={36} /> Suggested Meals</h2>
-          {suggestions.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">✨</div>
-              <p className="text-xl font-semibold text-gray-800 mb-2">No Nutritional Deficiencies Detected!</p>
-              <p className="text-gray-600">You're meeting your nutritional targets for the selected week. Keep up the great work!</p>
-            </div>
-          ) : suggestedMeals.length > 0 ? (
-            <>
-              <p className="text-gray-600 mb-6">These meals address multiple nutritional deficiencies at once:</p>
-              <div className="grid md:grid-cols-2 gap-5 md:gap-7">
-                {suggestedMeals.slice(0, 4).map(meal => (
-                  <div key={meal.id} className="border-4 border-gray-200 rounded-3xl p-6 hover:border-emerald-400 hover:shadow-2xl transition-all duration-300 bg-gray-50 transform hover:scale-105 hover:-rotate-1">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-800">{meal.name}</h3>
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{meal.category}</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-green-600">{meal.deficitsCovered} deficits</p>
-                        <p className="text-xs text-gray-500">covered</p>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4 space-y-1">
-                      {meal.foods.map((food, idx) => (
-                        <div key={idx} className="text-sm text-gray-700 flex justify-between">
-                          <span>• {food.name}</span>
-                          <span className="text-gray-500">{food.amount} {food.unit}</span>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div className="mb-3 pb-3 border-t border-gray-200 pt-3">
-                      <div className="flex justify-between text-xs text-gray-600">
-                        <span>Calories: {Math.round(meal.totalNutrients.calories)}</span>
-                        <span>Protein: {meal.totalNutrients.protein.toFixed(1)}g</span>
-                        <span>Carbs: {meal.totalNutrients.carbs.toFixed(1)}g</span>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={() => handleAddSuggestedMeal(meal)}
-                      className="w-full bg-emerald-600 text-white py-3 rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-black shadow-lg hover:shadow-xl transform hover:scale-105"
-                    >
-                      Add to Log
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-12">
-              <div className="text-4xl mb-4">🔄</div>
-              <p className="text-lg font-semibold text-gray-800 mb-2">Loading meal suggestions...</p>
-              <p className="text-gray-600">Analyzing your deficiencies to find the best meals for you.</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -635,83 +1021,16 @@ const WeeklyAnalysisView = ({ weeklyData, dateRange }) => {
             <span className="text-sm text-gray-500">{microData.length} nutrients</span>
           </button>
           
-          {showMicro && (
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-              {microData.map(([nutrient, value]) => (
-                <div key={nutrient} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                  <p className="text-xs text-gray-600 mb-1">{formatNutrientName(nutrient)}</p>
-                  <p className="text-lg font-semibold text-gray-800">{safeNumber(value).toFixed(1)}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {microData.map(([nutrient, value]) => (
+              <div key={nutrient} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-600 mb-1">{formatNutrientName(nutrient)}</p>
+                <p className="text-lg font-semibold text-gray-800">{safeNumber(value).toFixed(1)} {getNutrientUnit(nutrient)}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-    </div>
-  );
-};
-
-// Meals list view
-const MealsView = ({ meals, onBack, onEdit, onDelete }) => {
-  const [confirmDelete, setConfirmDelete] = React.useState(null);
-  
-  if (!meals.length) return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
-      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8 text-center">
-        <h2 className="text-3xl font-bold mb-4">Meals</h2>
-        <p className="text-gray-600 mb-6">No meals logged yet.</p>
-        <button onClick={onBack} className="px-6 py-3 bg-gray-200 rounded-lg hover:bg-gray-300">Back</button>
-      </div>
-    </div>
-  );
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
-      <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-gray-800">Meal History</h2>
-          <button onClick={onBack} className="text-gray-600 hover:text-gray-800"><X /></button>
-        </div>
-        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
-          {meals.slice().reverse().map(meal => (
-            <div key={meal.id} className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-white to-green-50">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-semibold text-lg">{new Date(meal.date).toLocaleDateString()}</h3>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm text-gray-500 mr-2">Items: {meal.items.length}</div>
-                  <button onClick={()=>onEdit(meal)} className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition">Edit</button>
-                  {confirmDelete === meal.id ? (
-                    <div className="flex gap-1">
-                      <button onClick={()=>{onDelete(meal.id); setConfirmDelete(null);}} className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">Confirm</button>
-                      <button onClick={()=>setConfirmDelete(null)} className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500">Cancel</button>
-                    </div>
-                  ) : (
-                    <button onClick={()=>setConfirmDelete(meal.id)} className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition">Delete</button>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3">
-                {Object.entries(meal.totalNutrients || {}).slice(0,12).map(([k,v]) => (
-                  <div key={k} className="bg-gray-50 rounded p-2">
-                    <p className="text-gray-600">{formatNutrientName(k)}</p>
-                    <p className="font-semibold">{safeNumber(v).toFixed(1)}</p>
-                  </div>
-                ))}
-              </div>
-              <details className="text-sm">
-                <summary className="cursor-pointer text-green-700">Show items</summary>
-                <ul className="mt-2 space-y-1">
-                  {meal.items.map((it,i)=>(
-                    <li key={i} className="flex justify-between border-b last:border-b-0 py-1">
-                      <span>{it.name} x {it.amount} {it.unit}</span>
-                      <span>{Math.round(safeNumber(it.nutrients?.calories))} cal</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
@@ -737,7 +1056,17 @@ const ChartsView = ({ meals, onBack }) => {
   const chartData = perDay.map(([d,v])=>({ date:d, value: safeNumber(v) }));
   return (
     <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
-      <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white">
+      <div id="charts-panel" className="max-w-5xl mx-auto bg-white rounded-3xl shadow-2xl p-6 md:p-8 border-4 border-white" style={{
+        position: 'fixed',
+        top: '1.5rem',
+        left: '1rem',
+        right: '1rem',
+        bottom: '1rem',
+        maxWidth: '64rem',
+        margin: '0 auto',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain'
+      }}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl md:text-4xl font-black text-emerald-700">Nutrition Charts</h2>
           <button onClick={onBack} className="text-white bg-gray-700 hover:bg-gray-800 p-3 rounded-2xl transition-all duration-300 transform hover:scale-110 shadow-lg"><X /></button>
@@ -1007,6 +1336,22 @@ const AddFoodForm = ({ food, onAdd, onCancel }) => {
       fat: safeNumber(food.fat)*ratio,
       fiber: safeNumber(food.fiber)*ratio,
       sugar: safeNumber(food.sugar)*ratio,
+      calcium: safeNumber(food.calcium)*ratio,
+      iron: safeNumber(food.iron)*ratio,
+      magnesium: safeNumber(food.magnesium)*ratio,
+      phosphorus: safeNumber(food.phosphorus)*ratio,
+      potassium: safeNumber(food.potassium)*ratio,
+      sodium: safeNumber(food.sodium)*ratio,
+      zinc: safeNumber(food.zinc)*ratio,
+      vitaminA: safeNumber(food.vitaminA)*ratio,
+      vitaminC: safeNumber(food.vitaminC)*ratio,
+      vitaminD: safeNumber(food.vitaminD)*ratio,
+      vitaminE: safeNumber(food.vitaminE)*ratio,
+      vitaminK: safeNumber(food.vitaminK)*ratio,
+      vitaminB6: safeNumber(food.vitaminB6)*ratio,
+      vitaminB12: safeNumber(food.vitaminB12)*ratio,
+      folate: safeNumber(food.folate)*ratio,
+      niacin: safeNumber(food.niacin)*ratio,
     };
   };
   const perUnit = getPerUnit();
