@@ -44,6 +44,7 @@ const AteNutritionApp = () => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [meals, setMeals] = useState([]);
+  const [showSplashAnimation, setShowSplashAnimation] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -586,9 +587,50 @@ const AteNutritionApp = () => {
   }, [suggestions.length, selectedWeekOffset, meals.length]);
 
   if (currentView === 'login') return <LoginView onLogin={(u,p)=>{
-    try { const stored = localStorage.getItem(`user-${u}`); if (!stored) return false; const su = JSON.parse(stored); if (su.password === p) { localStorage.setItem('current-user', JSON.stringify(su)); setUser(su); const prof = localStorage.getItem(`profile-${u}`); if (prof) setProfile(JSON.parse(prof)); const ms = localStorage.getItem(`meals-${u}`); if (ms) setMeals(JSON.parse(ms)); transitionToView('dashboard'); return true; } } catch(e){} return false; }} onCreateAccount={(u,p)=>{ const nu={username:u,password:p}; localStorage.setItem(`user-${u}`, JSON.stringify(nu)); localStorage.setItem('current-user', JSON.stringify(nu)); setUser(nu); transitionToView('create-profile'); return true; }} />;
+    try {
+      // Try username first
+      let stored = localStorage.getItem(`user-${u}`);
+      let su = null;
+      
+      if (stored) {
+        su = JSON.parse(stored);
+      } else {
+        // Try finding by email
+        const allKeys = Object.keys(localStorage);
+        for (const key of allKeys) {
+          if (key.startsWith('user-')) {
+            const user = JSON.parse(localStorage.getItem(key));
+            if (user.email && user.email.toLowerCase() === u.toLowerCase()) {
+              su = user;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (su && su.password === p) {
+        localStorage.setItem('current-user', JSON.stringify(su));
+        setUser(su);
+        const prof = localStorage.getItem(`profile-${su.username}`);
+        if (prof) setProfile(JSON.parse(prof));
+        const ms = localStorage.getItem(`meals-${su.username}`);
+        if (ms) setMeals(JSON.parse(ms));
+        setShowSplashAnimation(true);
+        transitionToView('dashboard');
+        return true;
+      }
+    } catch(e){}
+    return false;
+  }} onCreateAccount={(u,e,p)=>{
+    const nu={username:u,email:e,password:p};
+    localStorage.setItem(`user-${u}`, JSON.stringify(nu));
+    localStorage.setItem('current-user', JSON.stringify(nu));
+    setUser(nu);
+    transitionToView('create-profile');
+    return true;
+  }} />;
 
-  if (currentView === 'create-profile') return <CreateProfileView onSubmit={(pd)=>{ if(!user) return transitionToView('login'); localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); transitionToView('dashboard'); }} />;
+  if (currentView === 'create-profile') return <CreateProfileView onSubmit={(pd)=>{ if(!user) return transitionToView('login'); localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); setShowSplashAnimation(true); transitionToView('dashboard'); }} />;
 
   if (currentView === 'profile') return <ProfileView profile={profile} onUpdate={(pd)=>{ if(!user) return; localStorage.setItem(`profile-${user.username}`, JSON.stringify(pd)); setProfile(pd); }} onBack={()=>transitionToView('dashboard')} />;
 
@@ -703,21 +745,71 @@ const AteNutritionApp = () => {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
-      <div className="max-w-6xl mx-auto">
+    <>
+      {showSplashAnimation && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 99999,
+          backgroundColor: '#17b564',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <video
+            autoPlay
+            muted
+            playsInline
+            onEnded={() => setShowSplashAnimation(false)}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }}
+          >
+            <source src="/logo.mp4" type="video/mp4" />
+          </video>
+        </div>
+      )}
+      <div className="min-h-screen p-4 md:p-6" style={{backgroundColor: '#17b564'}}>
+        <div className="max-w-6xl mx-auto">
         <div id="dashboard-header"
-          className="flex justify-between items-center mb-6 md:mb-8 bg-white rounded-3xl p-5 md:p-7 shadow-2xl border-4 border-white"
+          className="flex justify-between items-stretch mb-6 md:mb-8 bg-white rounded-3xl p-5 md:p-7 shadow-2xl border-4 border-white"
           style={{
             opacity: isTransitioning && expandingElement && expandingElement !== 'reverse' ? 0 : 1,
             transition: 'opacity 300ms ease-out',
             position: 'relative',
-            zIndex: expandingElement === 'reverse' ? 10000 : 'auto'
+            zIndex: expandingElement === 'reverse' ? 10000 : 'auto',
+            minHeight: '88px'
           }}
         >
-          <div>
-            <h1 className="text-4xl md:text-5xl font-black text-emerald-700" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>ATE!</h1>
-            <p className="text-gray-600 text-base md:text-lg font-semibold">Welcome back, {profile?.name || user?.username}</p>
-            <p className="text-sm text-gray-500 mt-1">{weeklyMeals.length} {weeklyMeals.length === 1 ? 'meal' : 'meals'} logged this week</p>
+          <div className="flex items-center gap-0">
+            <div
+              aria-label="ATE logo"
+              style={{
+                display: 'inline-block',
+                height: '100%',
+                width: 'auto',
+                aspectRatio: '2 / 1',
+                backgroundColor: '#17b564',
+                WebkitMaskImage: 'url(/logo.png)',
+                maskImage: 'url(/logo.png)',
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'left center',
+                maskPosition: 'left center',
+                WebkitMaskSize: 'contain',
+                maskSize: 'contain',
+                marginRight: '4px'
+              }}
+            />
+            <div className="flex flex-col justify-center leading-none m-0">
+              <p className="text-gray-600 text-sm md:text-base font-semibold m-0 whitespace-nowrap">Welcome back, {profile?.name || user?.username}</p>
+              <p className="text-xs text-gray-500 m-0 whitespace-nowrap">{weeklyMeals.length} {weeklyMeals.length === 1 ? 'meal' : 'meals'} logged this week</p>
+            </div>
           </div>
           <div className="flex gap-3">
             <button onClick={()=>transitionToView('profile')} className="px-4 md:px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:scale-105 border-2 border-emerald-700">Profile</button>
@@ -840,8 +932,9 @@ const AteNutritionApp = () => {
 
         {/* Removed Suggested Meals block from dashboard; now in Recommendations overlay */}
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
@@ -1133,28 +1226,69 @@ const ChartsView = ({ meals, onBack }) => {
 const LoginView = ({ onLogin, onCreateAccount }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+  
   const handleSubmit = async () => {
     setError('');
     if (isCreating) {
-      const ok = await onCreateAccount(username, password);
+      if (!username.trim()) {
+        setError('Username is required');
+        return;
+      }
+      if (!validateEmail(email)) {
+        setError('Please enter a valid email address');
+        return;
+      }
+      if (!password.trim()) {
+        setError('Password is required');
+        return;
+      }
+      const ok = await onCreateAccount(username, email, password);
       if (!ok) setError('Failed to create account');
     } else {
       const ok = await onLogin(username, password);
-      if (!ok) setError('Invalid username or password');
+      if (!ok) setError('Invalid username/email or password');
     }
   };
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{backgroundColor: '#17b564'}}>
       <div className="bg-white rounded-3xl shadow-2xl p-10 w-full max-w-md border-4 border-white transform hover:scale-105 transition-all duration-300">
-        <h1 className="text-6xl font-black text-center mb-3 text-emerald-700" style={{textShadow: '2px 2px 4px rgba(0,0,0,0.1)'}}>ATE!</h1>
+        <div className="flex justify-center mb-3">
+          <div
+            aria-label="ATE logo"
+            className="h-16 w-48"
+            style={{
+              backgroundColor: '#17b564',
+              WebkitMaskImage: 'url(/logo.png)',
+              maskImage: 'url(/logo.png)',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain'
+            }}
+          />
+        </div>
         <p className="text-center text-gray-600 mb-10 text-lg font-semibold">Track your nutrition with real data</p>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{isCreating ? 'Username' : 'Username or Email'}</label>
             <input type="text" value={username} onChange={e=>setUsername(e.target.value)} className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none" />
           </div>
+          {isCreating && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none" placeholder="your@email.com" />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none" />
