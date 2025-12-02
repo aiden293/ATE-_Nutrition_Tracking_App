@@ -2,38 +2,92 @@
 
 A comprehensive nutrition tracking application with real-time food search, meal logging, weekly analytics, and personalized recommendations.
 
-## 🚀 Dual Backend Support
+## 🚀 Getting Started
 
-This project supports **TWO interchangeable backends**:
+This application uses a **Python/Flask backend** and **React frontend**.
 
-- **Node.js/Express** (Original) - Port 5000
-- **Python/Flask** (New) - Port 5001
+## Installation & Setup
 
-**See [BACKEND_GUIDE.md](BACKEND_GUIDE.md) for complete backend documentation.**
+### Prerequisites
+- Python 3.8 or higher
+- Node.js 14 or higher
+- npm or yarn
 
-## Quick Start
+### 1. Backend Setup (Python/Flask)
 
-### 1. Start Backend (Choose One)
-
-**Option A: Node.js Backend** (Recommended for JavaScript developers)
+#### Install Python Dependencies
 ```bash
-./start-backend.sh node
-# Or: cd backend && npm install && node server.js
+cd backend
+pip install -r requirements.txt
 ```
 
-**Option B: Python Backend** (Recommended for Python developers)
+#### Configure Environment (Optional)
+Create a `.env` file in the `backend` directory:
 ```bash
-./start-backend.sh python
-# Or: cd backend && pip install -r requirements.txt && python server.py
+# Use JSON database (default)
+USE_JSON_DB=true
+
+# Or configure MySQL (if not using JSON)
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=nutrition_db
 ```
 
-### 2. Start Frontend
+#### Run the Backend
 ```bash
+cd backend
+python3 server.py
+```
+
+The backend will start on **http://localhost:5001**
+
+**Note:** The Python backend uses the USDA FoodData Central database (`usda_foods.json`) with 7,327+ foods.
+
+### 2. Frontend Setup (React)
+
+#### Install Node Dependencies
+```bash
+# From the root directory
 npm install
+```
+
+#### Run the Frontend
+```bash
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the app.
+The app will open at **http://localhost:3000**
+
+## Project Structure
+
+```
+ATE-_Nutrition_Tracking_App/
+├── backend/
+│   ├── server.py              # Python Flask API server
+│   ├── json_db.py            # JSON database handler
+│   ├── requirements.txt       # Python dependencies
+│   └── usda_foods.json       # Food nutrition database
+├── src/
+│   └── App.js                # React frontend application
+└── public/
+    └── index.html            # HTML template
+```
+
+## Running in Production
+
+### Build Frontend
+```bash
+npm run build
+```
+
+### Run Backend
+```bash
+cd backend
+python3 server.py
+```
+
+For production deployment, consider using **gunicorn** or **uwsgi** to serve the Flask application.
 
 ---
 
