@@ -29,3 +29,8 @@ backend/db.js
 # Package lock
 package-lock.json
 backend/package-lock.json
+
+# Full database files (only keep trimmed version)
+foodNutrientDatabase.json
+foodNutrientDatabase_trimmed_backup*.json
+backend_server.log
