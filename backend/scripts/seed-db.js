@@ -4,7 +4,7 @@ require('dotenv').config();
 const StreamArray = require('stream-json/streamers/StreamArray');
 const db = require('../db');
 
-const filePath = path.join(__dirname, '../../foodNutrientDatabase.json');
+const filePath = path.join(__dirname, '../../foodNutrientDatabase_trimmed.json');
 
 const BATCH_SIZE = 500;
 let batch = [];

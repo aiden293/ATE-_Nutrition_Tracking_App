@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const StreamArray = require('stream-json/streamers/StreamArray');
 
-const filePath = path.join(__dirname, '../foodNutrientDatabase.json');
+const filePath = path.join(__dirname, '../foodNutrientDatabase_trimmed.json');
 
 function safeGet(obj, keys) {
   for (const k of keys) {
@@ -95,34 +95,31 @@ function mapNutrients(item) {
   return out;
 }
 
+// Standard measurement options presented to users for every food item.
+// Each option includes an approximate `gramsPerUnit` when sensible. Frontend
+// can use `gramsPerUnit` to convert the entered numeric amount into grams;
+// options without `gramsPerUnit` should be treated as "eyeball" units.
+const STANDARD_SERVINGS = [
+  { label: 'g', type: 'mass', unit: 'g', gramsPerUnit: 1 },
+  { label: 'oz', type: 'mass', unit: 'oz', gramsPerUnit: 28.35 },
+  { label: 'cup', type: 'volume', unit: 'cup', gramsPerUnit: 240 },
+  { label: 'tbsp', type: 'volume', unit: 'tbsp', gramsPerUnit: 15 },
+  { label: 'tsp', type: 'volume', unit: 'tsp', gramsPerUnit: 5 },
+  { label: 'bowl', type: 'eyeball', unit: 'bowl', gramsPerUnit: 300 },
+  { label: 'piece', type: 'eyeball', unit: 'piece', gramsPerUnit: null }
+];
+
 function mapItem(item) {
   // USDA FDC JSON: description is the food name, foodNutrients array contains nutrient data
   const id = safeGet(item, ['fdcId', 'ndbNumber', 'cn_code', 'id', 'code', 'food_id']) || null;
   const name = safeGet(item, ['description', 'descriptor', 'name', 'desc', 'food_name']) || 'Unknown';
 
-  // Extract all available portions/serving sizes
-  const portions = safeGet(item, ['foodPortions', 'weights', 'weight', 'measures', 'serving']) || [];
-  let servingOptions = [];
-  
-  if (Array.isArray(portions)) {
-    servingOptions = portions
-      .filter(p => p.gramWeight && p.modifier)
-      .map(p => ({
-        gramWeight: Number(p.gramWeight),
-        label: p.modifier,
-        amount: p.value || 1,
-        measureUnit: p.measureUnit?.name || 'undetermined'
-      }))
-      .sort((a, b) => a.gramWeight - b.gramWeight);
-  }
-
-  // Default to 100g if no portions found
-  if (servingOptions.length === 0) {
-    servingOptions = [{ gramWeight: 100, label: 'g', amount: 100, measureUnit: 'gram' }];
-  }
-
-  const defaultServing = servingOptions[0];
-  const unit = `${defaultServing.gramWeight} ${defaultServing.label}`;
+  // Use standardized serving options instead of item-specific portions.
+  // Frontend will present these to the user and accept a numeric quantity.
+  const servingOptions = STANDARD_SERVINGS.map(o => ({ ...o }));
+  // Default serving for display purposes: 100 g equivalent
+  const defaultServing = { label: 'g', type: 'mass', unit: 'g', gramsPerUnit: 1 };
+  const unit = `100 ${defaultServing.label}`;
 
   const nut = mapNutrients(item);
 
@@ -206,15 +203,18 @@ function streamFind(limit = 100) {
 
 function streamSearch(query, limit = 50) {
   return new Promise((resolve, reject) => {
-    const q = query.toString().toLowerCase();
+    const normalize = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const q = normalize(query);
+    const tokens = q.split(/\s+/).filter(Boolean);
     const results = [];
     const stream = fs.createReadStream(filePath).pipe(StreamArray.withParser());
 
     stream.on('data', ({key, value}) => {
-      const name = (safeGet(value, ['description','descriptor','name','desc','food_name']) || '').toString().toLowerCase();
-      if (name.includes(q)) {
-        results.push(mapItem(value));
-      }
+      const nameRaw = (safeGet(value, ['description','descriptor','name','desc','food_name']) || '').toString();
+      const name = normalize(nameRaw);
+      // Match if all tokens from query appear in the normalized name (order-independent)
+      const ok = tokens.length === 0 ? false : tokens.every(t => name.includes(t));
+      if (ok) results.push(mapItem(value));
       if (results.length >= limit) {
         stream.destroy();
         resolve(results);
@@ -243,10 +243,10 @@ function streamSearch(query, limit = 50) {
           return resolve(results);
         }
 
-        // Search the full array
+        // Search the full array using normalized token matching
         for (const value of arr) {
-          const name = (safeGet(value, ['description','descriptor','name','desc','food_name']) || '').toString().toLowerCase();
-          if (name.includes(q)) {
+          const name = normalize(safeGet(value, ['description','descriptor','name','desc','food_name']) || '');
+          if (tokens.length > 0 && tokens.every(t => name.includes(t))) {
             results.push(mapItem(value));
             if (results.length >= limit) break;
           }
@@ -277,8 +277,8 @@ function streamSearch(query, limit = 50) {
           if (!arr) return reject(new Error('No array found inside JSON top-level object'));
 
           for (const value of arr) {
-            const name = (safeGet(value, ['description','descriptor','name','desc','food_name']) || '').toString().toLowerCase();
-            if (name.includes(q)) {
+            const name = normalize(safeGet(value, ['description','descriptor','name','desc','food_name']) || '');
+            if (tokens.length > 0 && tokens.every(t => name.includes(t))) {
               results.push(mapItem(value));
               if (results.length >= limit) break;
             }

@@ -22,7 +22,7 @@ const envJsonTrue = typeof _useJsonEnv === 'string' && !['0', 'false', 'no', '']
 const JSON_MODE = envJsonTrue;
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 
 app.use(cors());
@@ -30,7 +30,7 @@ app.use(express.json());
 
 // Health endpoint to diagnose JSON vs SQL mode and file availability
 app.get('/api/health', (req, res) => {
-  const jsonPath = path.join(__dirname, '../foodNutrientDatabase.json');
+  const jsonPath = path.join(__dirname, '../foodNutrientDatabase_trimmed.json');
   const jsonExists = fs.existsSync(jsonPath);
   res.json({
     mode: JSON_MODE ? 'json' : (db ? 'sql' : 'none'),
@@ -98,8 +98,9 @@ app.get('/api/foods/search/:query', async (req, res) => {
   if (!db) return res.status(500).json({ error: 'No database configured' });
 
   try {
-    const searchTerm = `%${q}%`;
-    const [rows] = await db.query(`
+    // Support multi-term searches: split query into tokens and require each token to appear (AND)
+    const tokens = q.split(/\s+/).filter(Boolean);
+    let sql = `
       SELECT DISTINCT
         f.cn_code as id,
         f.descriptor as name,
@@ -114,10 +115,17 @@ app.get('/api/foods/search/:query', async (req, res) => {
       LEFT JOIN cndb_nutval nv ON f.cn_code = nv.cn_code
       LEFT JOIN cndb_nutdes n ON nv.nutrient_code = n.nutrient_code
       LEFT JOIN cndb_wght w ON f.cn_code = w.cn_code AND w.weights_sequence_number = 1
-      WHERE f.descriptor LIKE ?
-      GROUP BY f.cn_code, f.descriptor, w.amount, w.measure_description
-      LIMIT 50
-    `, [searchTerm]);
+    `;
+
+    const params = [];
+    if (tokens.length > 0) {
+      const likeClauses = tokens.map(() => `f.descriptor LIKE ?`).join(' AND ');
+      sql += ` WHERE ${likeClauses}`;
+      for (const t of tokens) params.push(`%${t}%`);
+    }
+
+    sql += ` GROUP BY f.cn_code, f.descriptor, w.amount, w.measure_description LIMIT 50`;
+    const [rows] = await db.query(sql, params);
     res.json(rows);
   } catch (error) {
     console.error('Food search error:', error);
@@ -140,7 +148,175 @@ app.get('/api/meals/:userId', async (req, res) => {
   res.json([]);
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Using database: ${process.env.DB_NAME || 'cndb_sql_db'}`);
+// Meal suggestion endpoint - suggests meals based on nutrient deficiencies
+app.post('/api/suggest-meals', async (req, res) => {
+  const { deficiencies, allergies } = req.body; // deficiencies: Array of {nutrient, deficit, target}, allergies: string
+  
+  if (!deficiencies || !Array.isArray(deficiencies) || deficiencies.length === 0) {
+    return res.json([]);
+  }
+
+  try {
+    const mealTemplates = require('./mealTemplates');
+    const useJson = JSON_MODE || !db;
+    
+    if (!useJson || !jsonDb) {
+      return res.status(500).json({ error: 'Meal suggestions require JSON database mode' });
+    }
+
+    // Parse allergies into array of lowercase terms
+    const allergyList = allergies 
+      ? allergies.toLowerCase().split(',').map(a => a.trim()).filter(Boolean)
+      : [];
+
+    // Helper to search for a food and pick best match
+    const findFood = async (searchTerm) => {
+      const results = await jsonDb.streamSearch(searchTerm, 5);
+      return results[0] || null; // Pick first match
+    };
+
+    // Process each meal template
+    const enrichedMeals = await Promise.all(
+      mealTemplates.map(async (template) => {
+        try {
+          // Look up each food in the template
+          const foodDataPromises = template.foods.map(async (foodSpec) => {
+            const food = await findFood(foodSpec.search);
+            if (!food) return null;
+            
+            // Food database has nutrients per 100g, need to scale properly
+            let multiplier = 1; // Default to 1x (100g portion)
+            
+            // For gram amounts, divide by 100 since DB is per 100g
+            if (foodSpec.unit === 'g') {
+              multiplier = (foodSpec.amount || 100) / 100;
+            }
+            // For count-based units, use much smaller multipliers
+            else if (['large', 'medium', 'small'].includes(foodSpec.unit)) {
+              multiplier = foodSpec.amount * 0.5; // Each unit ~= 50g
+            }
+            else if (['slice', 'pieces', 'whole', 'patty', 'shells', 'tortillas', 'roll', 'cloves'].includes(foodSpec.unit)) {
+              multiplier = foodSpec.amount * 0.3; // Each unit ~= 30g
+            }
+            else if (['cup', 'tbsp', 'tsp'].includes(foodSpec.unit)) {
+              multiplier = foodSpec.amount * 0.5; // Conservative estimate
+            }
+            
+            return {
+              name: food.name,
+              amount: foodSpec.amount,
+              unit: foodSpec.unit,
+              nutrients: {
+                calories: (food.calories || 0) * multiplier,
+                protein: (food.protein || 0) * multiplier,
+                carbs: (food.carbs || 0) * multiplier,
+                fat: (food.fat || 0) * multiplier,
+                fiber: (food.fiber || 0) * multiplier,
+                sugar: (food.sugar || 0) * multiplier,
+                calcium: (food.calcium || 0) * multiplier,
+                iron: (food.iron || 0) * multiplier,
+                magnesium: (food.magnesium || 0) * multiplier,
+                phosphorus: (food.phosphorus || 0) * multiplier,
+                potassium: (food.potassium || 0) * multiplier,
+                sodium: (food.sodium || 0) * multiplier,
+                zinc: (food.zinc || 0) * multiplier,
+                vitaminA: (food.vitaminA || 0) * multiplier,
+                vitaminC: (food.vitaminC || 0) * multiplier,
+                vitaminD: (food.vitaminD || 0) * multiplier,
+                vitaminE: (food.vitaminE || 0) * multiplier,
+                vitaminK: (food.vitaminK || 0) * multiplier,
+                vitaminB6: (food.vitaminB6 || 0) * multiplier,
+                vitaminB12: (food.vitaminB12 || 0) * multiplier,
+                folate: (food.folate || 0) * multiplier,
+                niacin: (food.niacin || 0) * multiplier
+              }
+            };
+          });
+
+          const foodData = (await Promise.all(foodDataPromises)).filter(Boolean);
+          
+          if (foodData.length === 0) return null;
+
+          // Check for allergens - if any food name contains an allergen, skip this meal
+          if (allergyList.length > 0) {
+            const mealContainsAllergen = foodData.some(food => 
+              allergyList.some(allergen => food.name.toLowerCase().includes(allergen))
+            );
+            if (mealContainsAllergen) {
+              return null; // Skip this meal
+            }
+          }
+
+          // Calculate total nutrients for the meal
+          const totalNutrients = foodData.reduce((acc, food) => {
+            Object.keys(food.nutrients).forEach(key => {
+              acc[key] = (acc[key] || 0) + (food.nutrients[key] || 0);
+            });
+            return acc;
+          }, {});
+
+          // Score meal based on deficiency coverage
+          let coverageScore = 0;
+          let deficitsCovered = 0;
+          
+          deficiencies.forEach(deficit => {
+            const nutrientValue = totalNutrients[deficit.nutrient] || 0;
+            const coveragePercent = (nutrientValue / deficit.deficit) * 100;
+            if (coveragePercent >= 20) { // Meal provides at least 20% of deficit
+              coverageScore += coveragePercent;
+              deficitsCovered++;
+            }
+          });
+
+          return {
+            id: template.id,
+            name: template.name,
+            category: template.category,
+            foods: foodData,
+            totalNutrients,
+            coverageScore,
+            deficitsCovered
+          };
+        } catch (err) {
+          console.error(`Error processing template ${template.name}:`, err);
+          return null;
+        }
+      })
+    );
+
+    // Filter out failed templates and sort by coverage score
+    const validMeals = enrichedMeals
+      .filter(meal => meal !== null && meal.deficitsCovered > 0)
+      .sort((a, b) => b.coverageScore - a.coverageScore)
+      .slice(0, 5); // Return top 5 meals
+
+    res.json(validMeals);
+  } catch (error) {
+    console.error('Meal suggestion error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
+
+// Resilient listen with automatic port fallback if in use
+const basePort = Number(PORT);
+const attemptListen = (p, tries = 0) => {
+  const server = app.listen(p, () => {
+    console.log(`🚀 Backend server running on http://localhost:${p}`);
+    console.log(`📊 Using database: ${process.env.DB_NAME || 'cndb_sql_db'}`);
+    if (p !== basePort) {
+      console.log(`⚠️ Started on fallback port (original ${basePort} was busy).`);
+    }
+  });
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && tries < 3) {
+      const next = p + 1;
+      console.warn(`Port ${p} in use, retrying on ${next}...`);
+      attemptListen(next, tries + 1);
+    } else {
+      console.error('Server failed to start:', err);
+      process.exit(1);
+    }
+  });
+};
+
+attemptListen(basePort);
